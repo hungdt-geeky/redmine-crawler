@@ -3,6 +3,7 @@
 # Auto-load .env file if exists
 require_relative 'dotenv'
 require_relative 'redmine_client'
+require_relative 'github_client'
 require 'optparse'
 require 'csv'
 
@@ -11,6 +12,7 @@ REDMINE_URL = ENV['REDMINE_URL'] || 'https://dev.zigexn.vn'
 HTTP_USERNAME = ENV['HTTP_USERNAME']
 HTTP_PASSWORD = ENV['HTTP_PASSWORD']
 REDMINE_API_KEY = ENV['REDMINE_API_KEY']
+GITHUB_TOKEN = ENV['GITHUB_TOKEN']
 DEBUG = ENV['DEBUG'] == 'true' || ENV['DEBUG'] == '1'
 
 # Parse command line arguments
@@ -92,6 +94,13 @@ client = RedmineClient.new(REDMINE_URL, REDMINE_API_KEY, {
   http_password: HTTP_PASSWORD
 })
 
+# Khởi tạo GitHub client (optional)
+github_client = nil
+if GITHUB_TOKEN && !GITHUB_TOKEN.empty?
+  github_client = GitHubClient.new(GITHUB_TOKEN, debug: debug_mode)
+  puts "GitHub integration enabled" if debug_mode
+end
+
 # Helper functions
 def get_custom_field(issue, field_name)
   return nil unless issue['custom_fields']
@@ -112,7 +121,7 @@ def calculate_diff_estimate(issue)
   }
 end
 
-def format_issue_data(issue, client: nil, include_subtasks: true)
+def format_issue_data(issue, client: nil, github_client: nil, include_subtasks: true)
   difficulty = get_custom_field(issue, 'Difficulty Level')
   pr_link = get_custom_field(issue, 'JP Request') || get_custom_field(issue, 'PR')
 
@@ -137,6 +146,21 @@ def format_issue_data(issue, client: nil, include_subtasks: true)
     updated_on: issue['updated_on']
   }
 
+  # Fetch GitHub PR/Issue info if PR link exists
+  if github_client && pr_link && pr_link != 'N/A' && pr_link.include?('github.com')
+    pr_info = github_client.get_pr_info(pr_link)
+    if pr_info
+      data[:pr_comments] = pr_info[:comments]
+      data[:pr_state] = pr_info[:state]
+    else
+      data[:pr_comments] = 'N/A'
+      data[:pr_state] = 'N/A'
+    end
+  else
+    data[:pr_comments] = 'N/A'
+    data[:pr_state] = 'N/A'
+  end
+
   # Lấy thêm thông tin cho Testing subtasks (bắt đầu với "4.")
   if issue['subject'] && issue['subject'].strip.start_with?('4.')
     data[:test_cases] = get_custom_field(issue, 'Number of test cases') || '0'
@@ -155,7 +179,7 @@ def format_issue_data(issue, client: nil, include_subtasks: true)
         child_full_data = client.get_issue(child['id'], include: 'children')
         if child_full_data['issue']
           # RECURSIVE: Lấy cả subtasks của subtask này (nested subtasks)
-          format_issue_data(child_full_data['issue'], client: client, include_subtasks: true)
+          format_issue_data(child_full_data['issue'], client: client, github_client: github_client, include_subtasks: true)
         else
           # Fallback nếu không fetch được
           nil
@@ -227,7 +251,11 @@ def print_table(issues_data)
 
     # Print PR link if exists
     if data[:pr_link] && data[:pr_link] != 'N/A'
-      puts "  PR: #{data[:pr_link]}"
+      pr_info = "  PR: #{data[:pr_link]}"
+      if data[:pr_comments] && data[:pr_comments] != 'N/A'
+        pr_info += " | Comments: #{data[:pr_comments]} | State: #{data[:pr_state]}"
+      end
+      puts pr_info
     end
 
     # Print subtasks recursively
@@ -272,8 +300,9 @@ def print_csv(issues_data)
     # Header
     csv << [
       'ID', 'Subject', 'Tracker', 'Status', 'Priority', 'Assigned To',
-      'Difficulty Level', 'PR Link', 'Estimated Hours', 'Spent Hours',
-      'Diff (Spent-Est)', 'Start Date', 'Due Date', 'Done %',
+      'Difficulty Level', 'PR Link', 'PR Comments', 'PR State',
+      'Estimated Hours', 'Spent Hours', 'Diff (Spent-Est)',
+      'Start Date', 'Due Date', 'Done %',
       'Test Cases', 'STG Bugs (VN)', 'STG Bugs (JP)', 'Production Bugs',
       'Created On', 'Updated On', 'Is Subtask', 'Parent ID'
     ]
@@ -289,6 +318,8 @@ def print_csv(issues_data)
         data[:assigned_to],
         data[:difficulty_level],
         data[:pr_link],
+        data[:pr_comments] || '',
+        data[:pr_state] || '',
         data[:estimated_hours],
         data[:spent_hours],
         data[:diff_estimate],
@@ -319,6 +350,8 @@ def print_csv(issues_data)
             subtask[:assigned_to],
             subtask[:difficulty_level],
             subtask[:pr_link],
+            subtask[:pr_comments] || '',
+            subtask[:pr_state] || '',
             subtask[:estimated_hours],
             subtask[:spent_hours],
             subtask[:diff_estimate],
@@ -359,7 +392,7 @@ if options[:issue_id]
     exit 1
   end
 
-  formatted = format_issue_data(issue_data['issue'], client: client, include_subtasks: options[:include_subtasks])
+  formatted = format_issue_data(issue_data['issue'], client: client, github_client: github_client, include_subtasks: options[:include_subtasks])
 
   case options[:format]
   when 'csv'
@@ -392,7 +425,7 @@ else
   end
 
   formatted_issues = issues_data['issues'].map do |issue|
-    format_issue_data(issue, client: client, include_subtasks: options[:include_subtasks])
+    format_issue_data(issue, client: client, github_client: github_client, include_subtasks: options[:include_subtasks])
   end
 
   case options[:format]
