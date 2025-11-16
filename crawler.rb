@@ -137,16 +137,17 @@ def format_issue_data(issue, client: nil, include_subtasks: true)
     updated_on: issue['updated_on']
   }
 
-  # Lấy subtasks nếu có
+  # Lấy subtasks nếu có (recursively)
   # NOTE: Redmine API chỉ trả về partial data cho children (id, tracker, subject)
   # Cần fetch full data cho mỗi subtask
   if include_subtasks && issue['children'] && client
     data[:subtasks] = issue['children'].map do |child|
       # Fetch full data cho subtask
       begin
-        child_full_data = client.get_issue(child['id'])
+        child_full_data = client.get_issue(child['id'], include: 'children')
         if child_full_data['issue']
-          format_issue_data(child_full_data['issue'], client: client, include_subtasks: false)
+          # RECURSIVE: Lấy cả subtasks của subtask này (nested subtasks)
+          format_issue_data(child_full_data['issue'], client: client, include_subtasks: true)
         else
           # Fallback nếu không fetch được
           nil
@@ -159,6 +160,34 @@ def format_issue_data(issue, client: nil, include_subtasks: true)
   end
 
   data
+end
+
+# Helper function to recursively print subtasks with proper indentation
+def print_subtasks(subtasks, indent_level = 1)
+  return unless subtasks && !subtasks.empty?
+
+  subtasks.each do |subtask|
+    sub_est_spent = "#{subtask[:estimated_hours]}/#{subtask[:spent_hours]}"
+    sub_diff = subtask[:diff_estimate] >= 0 ? "+#{subtask[:diff_estimate]}" : subtask[:diff_estimate].to_s
+
+    # Adjust subject width based on indentation level
+    indent = "  " + ("  " * indent_level)
+    subject_width = 40 - (indent_level * 2)
+    subject_width = 20 if subject_width < 20 # Minimum width
+
+    puts "#{indent}├─ #%-6s | %-#{subject_width}s | %-10s | %-8s | %s" % [
+      subtask[:id],
+      subtask[:subject][0..(subject_width - 1)],
+      subtask[:status][0..9],
+      sub_est_spent,
+      sub_diff
+    ]
+
+    # Recursively print nested subtasks with increased indentation
+    if subtask[:subtasks] && !subtask[:subtasks].empty?
+      print_subtasks(subtask[:subtasks], indent_level + 1)
+    end
+  end
 end
 
 def print_table(issues_data)
@@ -188,21 +217,11 @@ def print_table(issues_data)
       puts "  PR: #{data[:pr_link]}"
     end
 
-    # Print subtasks
+    # Print subtasks recursively
     if data[:subtasks] && !data[:subtasks].empty?
-      puts "  Subtasks (#{data[:subtasks].length}):"
-      data[:subtasks].each do |subtask|
-        sub_est_spent = "#{subtask[:estimated_hours]}/#{subtask[:spent_hours]}"
-        sub_diff = subtask[:diff_estimate] >= 0 ? "+#{subtask[:diff_estimate]}" : subtask[:diff_estimate].to_s
-
-        puts "    ├─ #%-6s | %-40s | %-10s | %-8s | %s" % [
-          subtask[:id],
-          subtask[:subject][0..38],
-          subtask[:status][0..9],
-          sub_est_spent,
-          sub_diff
-        ]
-      end
+      total_subtasks = count_total_subtasks(data[:subtasks])
+      puts "  Subtasks (#{data[:subtasks].length} direct, #{total_subtasks} total):"
+      print_subtasks(data[:subtasks])
     end
 
     puts "-" * 150
@@ -210,6 +229,17 @@ def print_table(issues_data)
 
   puts "Total: #{issues_data.length} issues"
   puts "=" * 150
+end
+
+# Helper function to count total subtasks including nested ones
+def count_total_subtasks(subtasks)
+  return 0 unless subtasks
+
+  count = subtasks.length
+  subtasks.each do |subtask|
+    count += count_total_subtasks(subtask[:subtasks]) if subtask[:subtasks]
+  end
+  count
 end
 
 def print_csv(issues_data)
