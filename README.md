@@ -15,9 +15,13 @@ git clone <repository-url>
 cd redmine-crawler
 ```
 
-2. Tạo file cấu hình `.env` từ template:
+2. Tạo file cấu hình `.env`:
 ```bash
+# Option 1: Copy từ template
 cp .env.example .env
+
+# Option 2: Tạo trực tiếp (nếu đã có file .env trong repo)
+# File .env sẽ được tự động load khi chạy script
 ```
 
 3. Chỉnh sửa file `.env` và điền thông tin của bạn:
@@ -78,16 +82,33 @@ HTTP_USERNAME=httpuser HTTP_PASSWORD=httppass REDMINE_API_KEY=apikey ruby exampl
 HTTP_USERNAME=httpuser HTTP_PASSWORD=httppass REDMINE_USERNAME=user REDMINE_PASSWORD=pass ruby example.rb
 ```
 
+### Auto-load .env file
+
+Script tự động load file `.env` nếu có. Bạn không cần `source .env` nữa!
+
+```bash
+# Sau khi đã cấu hình .env, chỉ cần chạy trực tiếp:
+ruby example.rb
+ruby get_user_story.rb -i 106864
+
+# File .env sẽ được tự động load
+# Environment variables từ command line vẫn có độ ưu tiên cao hơn
+```
+
 ### Chế độ Debug
 
 Để xem chi tiết request/response và troubleshoot lỗi:
 
 ```bash
-# Với DEBUG=true
-DEBUG=true HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_API_KEY=key ruby example.rb
+# Cách 1: Thêm DEBUG=true vào file .env
+# Chỉnh sửa .env:
+# DEBUG=true
 
-# Hoặc dùng option --debug (chỉ với get_user_story.rb)
-HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_API_KEY=key ruby get_user_story.rb -i 106864 --debug
+# Cách 2: Override bằng environment variable
+DEBUG=true ruby example.rb
+
+# Cách 3: Dùng option --debug (chỉ với get_user_story.rb)
+ruby get_user_story.rb -i 106864 --debug
 ```
 
 ## Sử dụng
@@ -97,12 +118,11 @@ HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_API_KEY=key ruby get_user_story.rb
 Chạy các ví dụ cơ bản:
 
 ```bash
-# Cách 1: Load từ file .env
-# (sau khi đã cấu hình file .env)
-source .env
+# Cách 1: Sử dụng file .env (Khuyến nghị - ĐƠN GIẢN NHẤT!)
+# Sau khi đã cấu hình file .env, chỉ cần:
 ruby example.rb
 
-# Cách 2: Inline environment variables
+# Cách 2: Inline environment variables (override .env)
 HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_API_KEY=key ruby example.rb
 ```
 
@@ -113,32 +133,29 @@ Script này hỗ trợ nhiều tùy chọn để lấy thông tin issues:
 #### Lấy thông tin một issue cụ thể:
 
 ```bash
-# Lấy issue #106864
-HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_API_KEY=key ruby get_user_story.rb -i 106864
+# Cách 1: Sử dụng .env (ĐƠN GIẢN!)
+ruby get_user_story.rb -i 106864
 
-# Hoặc load từ .env
-source .env && ruby get_user_story.rb -i 106864
+# Cách 2: Override với env variables
+HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_API_KEY=key ruby get_user_story.rb -i 106864
 ```
 
 #### Lấy danh sách issues:
 
 ```bash
 # Lấy 10 issues mới nhất
-HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_API_KEY=key ruby get_user_story.rb
+ruby get_user_story.rb
 
 # Lấy 20 issues mới nhất
-HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_API_KEY=key ruby get_user_story.rb -l 20
+ruby get_user_story.rb -l 20
 
-# Hoặc load từ .env cho ngắn gọn
-source .env && ruby get_user_story.rb -l 20
+# Lấy issues từ vị trí thứ 10
+ruby get_user_story.rb -l 10 -o 10
 ```
 
 #### Lọc issues theo điều kiện:
 
 ```bash
-# Load credentials từ .env trước
-source .env
-
 # Lọc theo project
 ruby get_user_story.rb -p project_identifier
 
@@ -157,13 +174,10 @@ ruby get_user_story.rb -p my_project -t 2 -s 1 -l 50
 #### Xuất kết quả dạng JSON:
 
 ```bash
-# Load credentials
-source .env
-
 # Xuất issue dạng JSON
 ruby get_user_story.rb -i 106864 --json
 
-# Xuất danh sách issues dạng JSON
+# Xuất danh sách issues dạng JSON và lưu vào file
 ruby get_user_story.rb -l 10 --json > issues.json
 ```
 
@@ -214,9 +228,11 @@ end
 ```
 redmine-crawler/
 ├── redmine_client.rb      # Class chính để tương tác với Redmine API
+├── dotenv.rb              # Auto-loader cho .env file
 ├── example.rb             # Script ví dụ đơn giản
 ├── get_user_story.rb      # Script nâng cao với nhiều options
 ├── .env.example           # Template cho file cấu hình
+├── .env                   # File cấu hình (tự tạo, đã có trong .gitignore)
 └── README.md              # File này
 ```
 

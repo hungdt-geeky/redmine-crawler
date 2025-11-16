@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
 
+# Auto-load .env file if exists
+require_relative 'dotenv'
 require_relative 'redmine_client'
 require 'optparse'
 
