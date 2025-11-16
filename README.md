@@ -23,6 +23,12 @@ cp .env.example .env
 3. Chỉnh sửa file `.env` và điền thông tin của bạn:
 ```
 REDMINE_URL=https://dev.zigexn.vn
+
+# HTTP Basic Auth (bắt buộc cho dev.zigexn.vn)
+HTTP_USERNAME=your_http_username
+HTTP_PASSWORD=your_http_password
+
+# Redmine API Key
 REDMINE_API_KEY=your_api_key_here
 ```
 
@@ -37,19 +43,39 @@ REDMINE_API_KEY=your_api_key_here
 
 ### Phương thức xác thực
 
-Script hỗ trợ 2 phương thức xác thực:
+Website `dev.zigexn.vn` có **2 lớp bảo mật**:
 
-**1. API Key (Khuyến nghị)**
+1. **HTTP Basic Authentication** (nginx layer) - BẮT BUỘC
+2. **Redmine Authentication** (application layer) - CHỌN MỘT
+
+#### Lớp 1: HTTP Basic Auth (nginx)
+
 ```bash
-export REDMINE_API_KEY=your_api_key_here
-ruby example.rb
+export HTTP_USERNAME=your_http_username
+export HTTP_PASSWORD=your_http_password
 ```
 
-**2. Username/Password**
+#### Lớp 2: Redmine Authentication (chọn một)
+
+**Option A: API Key (Khuyến nghị)**
+```bash
+export REDMINE_API_KEY=your_api_key_here
+```
+
+**Option B: Username/Password**
 ```bash
 export REDMINE_USERNAME=your_username
 export REDMINE_PASSWORD=your_password
-ruby example.rb
+```
+
+#### Ví dụ sử dụng đầy đủ:
+
+```bash
+# Với API Key (khuyến nghị)
+HTTP_USERNAME=httpuser HTTP_PASSWORD=httppass REDMINE_API_KEY=apikey ruby example.rb
+
+# Với Username/Password
+HTTP_USERNAME=httpuser HTTP_PASSWORD=httppass REDMINE_USERNAME=user REDMINE_PASSWORD=pass ruby example.rb
 ```
 
 ### Chế độ Debug
@@ -57,11 +83,11 @@ ruby example.rb
 Để xem chi tiết request/response và troubleshoot lỗi:
 
 ```bash
-# Sử dụng environment variable
-DEBUG=true REDMINE_API_KEY=your_key ruby example.rb
+# Với DEBUG=true
+DEBUG=true HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_API_KEY=key ruby example.rb
 
 # Hoặc dùng option --debug (chỉ với get_user_story.rb)
-REDMINE_API_KEY=your_key ruby get_user_story.rb -i 106864 --debug
+HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_API_KEY=key ruby get_user_story.rb -i 106864 --debug
 ```
 
 ## Sử dụng
@@ -71,9 +97,13 @@ REDMINE_API_KEY=your_key ruby get_user_story.rb -i 106864 --debug
 Chạy các ví dụ cơ bản:
 
 ```bash
-# Load API key từ file .env hoặc export trước
-export REDMINE_API_KEY=your_api_key_here
+# Cách 1: Load từ file .env
+# (sau khi đã cấu hình file .env)
+source .env
 ruby example.rb
+
+# Cách 2: Inline environment variables
+HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_API_KEY=key ruby example.rb
 ```
 
 ### 2. Script nâng cao (get_user_story.rb)
@@ -84,28 +114,31 @@ Script này hỗ trợ nhiều tùy chọn để lấy thông tin issues:
 
 ```bash
 # Lấy issue #106864
-ruby get_user_story.rb -i 106864
+HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_API_KEY=key ruby get_user_story.rb -i 106864
 
-# Hoặc với API key inline
-REDMINE_API_KEY=your_key ruby get_user_story.rb -i 106864
+# Hoặc load từ .env
+source .env && ruby get_user_story.rb -i 106864
 ```
 
 #### Lấy danh sách issues:
 
 ```bash
 # Lấy 10 issues mới nhất
-ruby get_user_story.rb
+HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_API_KEY=key ruby get_user_story.rb
 
 # Lấy 20 issues mới nhất
-ruby get_user_story.rb -l 20
+HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_API_KEY=key ruby get_user_story.rb -l 20
 
-# Lấy issues từ vị trí thứ 10
-ruby get_user_story.rb -l 10 -o 10
+# Hoặc load từ .env cho ngắn gọn
+source .env && ruby get_user_story.rb -l 20
 ```
 
 #### Lọc issues theo điều kiện:
 
 ```bash
+# Load credentials từ .env trước
+source .env
+
 # Lọc theo project
 ruby get_user_story.rb -p project_identifier
 
@@ -124,6 +157,9 @@ ruby get_user_story.rb -p my_project -t 2 -s 1 -l 50
 #### Xuất kết quả dạng JSON:
 
 ```bash
+# Load credentials
+source .env
+
 # Xuất issue dạng JSON
 ruby get_user_story.rb -i 106864 --json
 
@@ -198,27 +234,41 @@ redmine-crawler/
 Nếu bạn gặp lỗi này:
 ```
 Lỗi: Failed to fetch issue: 401 - Unauthorized
+www-authenticate: Basic realm="closed site"
 ```
+
+**Đây là lỗi HTTP Basic Auth từ nginx!** Website được bảo vệ bởi 2 lớp authentication.
 
 **Nguyên nhân và giải pháp:**
 
-1. **API Key chưa được thiết lập hoặc sai**
-   - Kiểm tra xem bạn đã set `REDMINE_API_KEY` chưa
-   - Chạy với debug mode để xem chi tiết: `DEBUG=true ruby example.rb`
-   - Đảm bảo API key đúng bằng cách login vào Redmine và kiểm tra lại
+1. **CHƯA CÓ HTTP_USERNAME và HTTP_PASSWORD** (Nguyên nhân phổ biến nhất!)
+   ```bash
+   # ĐÚNG - Cần cả HTTP Basic Auth VÀ Redmine API Key
+   HTTP_USERNAME=httpuser HTTP_PASSWORD=httppass REDMINE_API_KEY=key ruby example.rb
 
-2. **API Key đã hết hạn hoặc bị vô hiệu hóa**
+   # SAI - Thiếu HTTP Basic Auth
+   REDMINE_API_KEY=key ruby example.rb
+   ```
+
+2. **HTTP Basic Auth credentials sai**
+   - Kiểm tra lại HTTP_USERNAME và HTTP_PASSWORD
+   - Đây là credentials cho nginx, không phải Redmine user
+   - Liên hệ admin để lấy credentials đúng
+
+3. **Redmine API Key sai hoặc hết hạn**
+   - Sau khi đã qua được HTTP Basic Auth, vẫn cần Redmine authentication
    - Vào Redmine > My account > API access key
    - Click "Reset" để tạo key mới
 
-3. **REST API chưa được bật trên server**
-   - Liên hệ admin Redmine để bật REST API
-   - Vào Administration > Settings > API > Enable REST web service
-
-4. **Thử dùng Username/Password thay vì API Key**
+4. **Kiểm tra với Debug Mode**
    ```bash
-   REDMINE_USERNAME=your_username REDMINE_PASSWORD=your_password ruby example.rb
+   DEBUG=true HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_API_KEY=key ruby example.rb
    ```
+
+   Debug sẽ hiển thị:
+   - Có đang dùng HTTP Basic Auth không
+   - Headers được gửi đi
+   - Response từ server
 
 ### Lỗi SSL Certificate
 

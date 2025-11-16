@@ -4,6 +4,8 @@ require_relative 'redmine_client'
 
 # Cấu hình
 REDMINE_URL = ENV['REDMINE_URL'] || 'https://dev.zigexn.vn'
+HTTP_USERNAME = ENV['HTTP_USERNAME']
+HTTP_PASSWORD = ENV['HTTP_PASSWORD']
 REDMINE_API_KEY = ENV['REDMINE_API_KEY']
 REDMINE_USERNAME = ENV['REDMINE_USERNAME']
 REDMINE_PASSWORD = ENV['REDMINE_PASSWORD']
@@ -12,49 +14,50 @@ DEBUG = ENV['DEBUG'] == 'true' || ENV['DEBUG'] == '1'
 # Kiểm tra xem có thông tin đăng nhập không
 if REDMINE_API_KEY.nil? && (REDMINE_USERNAME.nil? || REDMINE_PASSWORD.nil?)
   puts "=" * 80
-  puts "ERROR: Chưa cấu hình thông tin xác thực!"
+  puts "ERROR: Chưa cấu hình thông tin xác thực Redmine!"
   puts "=" * 80
   puts ""
-  puts "Bạn cần thiết lập một trong hai phương thức xác thực sau:"
+  puts "Website này có HTTP Basic Auth protection. Bạn cần cấu hình:"
   puts ""
-  puts "PHƯƠNG THỨC 1: Dùng API Key (Khuyến nghị)"
-  puts "  1. Đăng nhập vào Redmine: #{REDMINE_URL}"
-  puts "  2. Click vào tên người dùng ở góc trên phải > 'My account'"
-  puts "  3. Tìm phần 'API access key' hoặc 'Access keys'"
-  puts "  4. Click 'Show' để xem hoặc 'Reset' để tạo key mới"
-  puts "  5. Chạy lại script với API key:"
+  puts "1. HTTP BASIC AUTH (bắt buộc - để qua nginx):"
+  puts "   HTTP_USERNAME=your_http_user HTTP_PASSWORD=your_http_pass"
   puts ""
-  puts "     REDMINE_API_KEY=your_api_key_here ruby example.rb"
+  puts "2. REDMINE AUTHENTICATION (chọn một):"
   puts ""
-  puts "PHƯƠNG THỨC 2: Dùng Username/Password"
-  puts "  Chạy script với username và password:"
+  puts "   PHƯƠNG THỨC A: API Key (Khuyến nghị)"
+  puts "     - Lấy API key từ Redmine > My account > API access key"
+  puts "     - Chạy:"
+  puts "       HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_API_KEY=key ruby example.rb"
   puts ""
-  puts "     REDMINE_USERNAME=your_username REDMINE_PASSWORD=your_password ruby example.rb"
+  puts "   PHƯƠNG THỨC B: Username/Password"
+  puts "     HTTP_USERNAME=user HTTP_PASSWORD=pass REDMINE_USERNAME=user REDMINE_PASSWORD=pass ruby example.rb"
   puts ""
   puts "CHẾ ĐỘ DEBUG:"
-  puts "  Để xem chi tiết request/response, thêm DEBUG=true:"
-  puts ""
-  puts "     DEBUG=true REDMINE_API_KEY=your_key ruby example.rb"
+  puts "  Thêm DEBUG=true để xem chi tiết:"
+  puts "    DEBUG=true HTTP_USERNAME=... HTTP_PASSWORD=... REDMINE_API_KEY=... ruby example.rb"
   puts ""
   puts "=" * 80
   exit 1
 end
 
+# Khởi tạo client options
+client_options = {
+  debug: DEBUG,
+  verify_ssl: false,  # Tắt SSL verification cho self-signed certificates
+  http_username: HTTP_USERNAME,
+  http_password: HTTP_PASSWORD
+}
+
 # Khởi tạo client
 if REDMINE_API_KEY
-  puts "Đang kết nối với Redmine bằng API Key..."
-  client = RedmineClient.new(REDMINE_URL, REDMINE_API_KEY, {
-    debug: DEBUG,
-    verify_ssl: false  # Tắt SSL verification cho self-signed certificates
-  })
+  puts "Đang kết nối với Redmine..."
+  client = RedmineClient.new(REDMINE_URL, REDMINE_API_KEY, client_options)
 else
-  puts "Đang kết nối với Redmine bằng Username/Password..."
-  client = RedmineClient.new(REDMINE_URL, nil, {
+  puts "Đang kết nối với Redmine..."
+  client = RedmineClient.new(REDMINE_URL, nil, client_options.merge({
     username: REDMINE_USERNAME,
-    password: REDMINE_PASSWORD,
-    debug: DEBUG,
-    verify_ssl: false
-  })
+    password: REDMINE_PASSWORD
+  }))
 end
 
 puts "Phương thức xác thực: #{client.auth_method}"
