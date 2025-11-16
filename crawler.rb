@@ -137,6 +137,14 @@ def format_issue_data(issue, client: nil, include_subtasks: true)
     updated_on: issue['updated_on']
   }
 
+  # Lấy thêm thông tin cho Testing subtasks (bắt đầu với "4.")
+  if issue['subject'] && issue['subject'].strip.start_with?('4.')
+    data[:test_cases] = get_custom_field(issue, 'Number of test cases') || '0'
+    data[:stg_bugs_vn] = get_custom_field(issue, 'STG Bugs (VN)') || '0'
+    data[:stg_bugs_jp] = get_custom_field(issue, 'STG Bugs (JP)') || '0'
+    data[:production_bugs] = get_custom_field(issue, 'Production Bugs') || '0'
+  end
+
   # Lấy subtasks nếu có (recursively)
   # NOTE: Redmine API chỉ trả về partial data cho children (id, tracker, subject)
   # Cần fetch full data cho mỗi subtask
@@ -182,6 +190,11 @@ def print_subtasks(subtasks, indent_level = 1)
       sub_est_spent,
       sub_diff
     ]
+
+    # Hiển thị thông tin testing cho subtasks bắt đầu với "4."
+    if subtask[:test_cases]
+      puts "#{indent}   Testing Info: Cases=#{subtask[:test_cases]} | STG(VN)=#{subtask[:stg_bugs_vn]} | STG(JP)=#{subtask[:stg_bugs_jp]} | Prod=#{subtask[:production_bugs]}"
+    end
 
     # Recursively print nested subtasks with increased indentation
     if subtask[:subtasks] && !subtask[:subtasks].empty?
@@ -242,6 +255,18 @@ def count_total_subtasks(subtasks)
   count
 end
 
+# Helper function to recursively flatten subtasks for CSV
+def flatten_subtasks_for_csv(subtasks, parent_id, result = [])
+  return result unless subtasks
+
+  subtasks.each do |subtask|
+    result << {data: subtask, parent_id: parent_id}
+    # Recursively add nested subtasks
+    flatten_subtasks_for_csv(subtask[:subtasks], subtask[:id], result) if subtask[:subtasks]
+  end
+  result
+end
+
 def print_csv(issues_data)
   csv_string = CSV.generate do |csv|
     # Header
@@ -249,6 +274,7 @@ def print_csv(issues_data)
       'ID', 'Subject', 'Tracker', 'Status', 'Priority', 'Assigned To',
       'Difficulty Level', 'PR Link', 'Estimated Hours', 'Spent Hours',
       'Diff (Spent-Est)', 'Start Date', 'Due Date', 'Done %',
+      'Test Cases', 'STG Bugs (VN)', 'STG Bugs (JP)', 'Production Bugs',
       'Created On', 'Updated On', 'Is Subtask', 'Parent ID'
     ]
 
@@ -269,15 +295,21 @@ def print_csv(issues_data)
         data[:start_date],
         data[:due_date],
         data[:done_ratio],
+        data[:test_cases] || '',
+        data[:stg_bugs_vn] || '',
+        data[:stg_bugs_jp] || '',
+        data[:production_bugs] || '',
         data[:created_on],
         data[:updated_on],
         'No',
         ''
       ]
 
-      # Add subtasks
+      # Add all subtasks (recursively flattened)
       if data[:subtasks]
-        data[:subtasks].each do |subtask|
+        flattened = flatten_subtasks_for_csv(data[:subtasks], data[:id])
+        flattened.each do |item|
+          subtask = item[:data]
           csv << [
             subtask[:id],
             subtask[:subject],
@@ -293,10 +325,14 @@ def print_csv(issues_data)
             subtask[:start_date],
             subtask[:due_date],
             subtask[:done_ratio],
+            subtask[:test_cases] || '',
+            subtask[:stg_bugs_vn] || '',
+            subtask[:stg_bugs_jp] || '',
+            subtask[:production_bugs] || '',
             subtask[:created_on],
             subtask[:updated_on],
             'Yes',
-            data[:id]
+            item[:parent_id]
           ]
         end
       end
