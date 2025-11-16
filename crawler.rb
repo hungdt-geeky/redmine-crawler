@@ -112,7 +112,7 @@ def calculate_diff_estimate(issue)
   }
 end
 
-def format_issue_data(issue, include_subtasks: true)
+def format_issue_data(issue, client: nil, include_subtasks: true)
   difficulty = get_custom_field(issue, 'Difficulty Level')
   pr_link = get_custom_field(issue, 'JP Request') || get_custom_field(issue, 'PR')
 
@@ -121,9 +121,9 @@ def format_issue_data(issue, include_subtasks: true)
   data = {
     id: issue['id'],
     subject: issue['subject'],
-    tracker: issue['tracker']['name'],
-    status: issue['status']['name'],
-    priority: issue['priority']['name'],
+    tracker: issue['tracker'] ? issue['tracker']['name'] : 'N/A',
+    status: issue['status'] ? issue['status']['name'] : 'N/A',
+    priority: issue['priority'] ? issue['priority']['name'] : 'N/A',
     assigned_to: issue['assigned_to'] ? issue['assigned_to']['name'] : 'Unassigned',
     difficulty_level: difficulty || 'N/A',
     pr_link: pr_link || 'N/A',
@@ -132,16 +132,30 @@ def format_issue_data(issue, include_subtasks: true)
     diff_estimate: diff_data[:diff],
     start_date: issue['start_date'],
     due_date: issue['due_date'],
-    done_ratio: issue['done_ratio'],
+    done_ratio: issue['done_ratio'] || 0,
     created_on: issue['created_on'],
     updated_on: issue['updated_on']
   }
 
   # Lấy subtasks nếu có
-  if include_subtasks && issue['children']
+  # NOTE: Redmine API chỉ trả về partial data cho children (id, tracker, subject)
+  # Cần fetch full data cho mỗi subtask
+  if include_subtasks && issue['children'] && client
     data[:subtasks] = issue['children'].map do |child|
-      format_issue_data(child, include_subtasks: false)
-    end
+      # Fetch full data cho subtask
+      begin
+        child_full_data = client.get_issue(child['id'])
+        if child_full_data['issue']
+          format_issue_data(child_full_data['issue'], client: client, include_subtasks: false)
+        else
+          # Fallback nếu không fetch được
+          nil
+        end
+      rescue => e
+        # Skip nếu có lỗi
+        nil
+      end
+    end.compact  # Remove nil values
   end
 
   data
@@ -279,7 +293,7 @@ if options[:issue_id]
     exit 1
   end
 
-  formatted = format_issue_data(issue_data['issue'], include_subtasks: options[:include_subtasks])
+  formatted = format_issue_data(issue_data['issue'], client: client, include_subtasks: options[:include_subtasks])
 
   case options[:format]
   when 'csv'
@@ -312,7 +326,7 @@ else
   end
 
   formatted_issues = issues_data['issues'].map do |issue|
-    format_issue_data(issue, include_subtasks: options[:include_subtasks])
+    format_issue_data(issue, client: client, include_subtasks: options[:include_subtasks])
   end
 
   case options[:format]

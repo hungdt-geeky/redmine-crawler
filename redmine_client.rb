@@ -55,8 +55,19 @@ class RedmineClient
 
   # Lấy thông tin chi tiết của một issue
   def get_issue(issue_id, options = {})
-    params = options.merge(include: 'journals,attachments,relations,watchers')
-    query_string = URI.encode_www_form(params)
+    # Merge includes instead of overriding
+    default_includes = ['journals', 'attachments', 'relations', 'watchers']
+
+    if options[:include]
+      # Combine default includes with custom includes
+      custom_includes = options[:include].split(',').map(&:strip)
+      all_includes = (default_includes + custom_includes).uniq
+      merged_options = options.merge(include: all_includes.join(','))
+    else
+      merged_options = options.merge(include: default_includes.join(','))
+    end
+
+    query_string = URI.encode_www_form(merged_options)
     url = URI("#{@base_url}/issues/#{issue_id}.json?#{query_string}")
     response = make_request(url)
 
