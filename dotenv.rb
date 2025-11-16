@@ -8,8 +8,11 @@ def load_dotenv(file_path = '.env')
   return unless File.exist?(file_path)
 
   File.readlines(file_path).each do |line|
+    # Remove leading/trailing whitespace and newlines
+    line = line.strip
+
     # Skip comments and empty lines
-    next if line.strip.start_with?('#') || line.strip.empty?
+    next if line.start_with?('#') || line.empty?
 
     # Parse KEY=VALUE format
     if line =~ /\A([A-Z_][A-Z0-9_]*)=(.*)\z/

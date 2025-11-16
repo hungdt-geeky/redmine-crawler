@@ -1,6 +1,6 @@
 # Redmine Crawler
 
-Script Ruby để lấy thông tin từ Redmine API. Hỗ trợ lấy thông tin về issues, user stories, projects và users.
+Script Ruby để crawl và phân tích dữ liệu từ Redmine API. Hỗ trợ lấy thông tin chi tiết về issues, user stories, subtasks với các metrics như Difficulty Level, PR links, và time estimates.
 
 ## Yêu cầu
 
@@ -112,6 +112,88 @@ ruby get_user_story.rb -i 106864 --debug
 ```
 
 ## Sử dụng
+
+### Script chính: crawler.rb (Khuyến nghị)
+
+Script này crawl dữ liệu từ Redmine với các thông tin chi tiết:
+- **Difficulty Level** - Độ khó của task
+- **PR Link** - Link đến Pull Request
+- **Diff Estimate** - Chênh lệch giữa thời gian spent và estimated (Spent - Estimated)
+- **Subtasks** - Tất cả thông tin của subtasks
+
+#### Crawl một issue cụ thể:
+
+```bash
+# Crawl issue #106864 với tất cả subtasks
+ruby crawler.rb -i 106864
+
+# Xuất ra CSV
+ruby crawler.rb -i 106864 -f csv > issue_106864.csv
+
+# Xuất ra JSON
+ruby crawler.rb -i 106864 -f json > issue_106864.json
+```
+
+#### Crawl danh sách issues:
+
+```bash
+# Crawl 25 User Stories mới nhất (tracker_id=2)
+ruby crawler.rb -t 2
+
+# Crawl 50 issues trong project
+ruby crawler.rb -p my_project -l 50
+
+# Crawl issues theo status (status_id=1 là New)
+ruby crawler.rb -s 1 -l 20
+
+# Kết hợp nhiều filter
+ruby crawler.rb -p my_project -t 2 -s 1 -l 100
+
+# Xuất ra CSV để import vào Excel
+ruby crawler.rb -t 2 -l 50 -f csv > user_stories.csv
+
+# Không hiển thị subtasks
+ruby crawler.rb -t 2 --no-subtasks
+```
+
+#### Các options:
+
+```
+-i, --issue-id ID          Crawl một issue cụ thể theo ID
+-p, --project PROJECT      Crawl issues trong project
+-t, --tracker TRACKER_ID   Lọc theo tracker ID (VD: 2 = User Story)
+-s, --status STATUS_ID     Lọc theo status ID
+-l, --limit LIMIT          Số lượng issues tối đa (mặc định: 25)
+-o, --offset OFFSET        Bỏ qua số issues đầu tiên
+-f, --format FORMAT        Format output: table, csv, json (mặc định: table)
+    --no-subtasks          Không hiển thị subtasks
+    --debug                Bật chế độ debug
+-h, --help                 Hiển thị trợ giúp
+```
+
+#### Output format:
+
+**Table format** (mặc định):
+```
+ID       | Subject                                           | Status     | Assigned   | Diff Lv  | Est/Spent  | Diff     | Done%
+106864   | #450 【中古車検索EX - Error Reporting】...        | Closed     | Chien Do   | 4        | 0.0/0.0    | 0.0      | 100%
+  PR: https://github.com/ZIGExN/chukosya_ex_v2/issues/450
+  Subtasks (2):
+    ├─ #106865 | Fix timeout error                             | Closed     | 2.0/3.0    | +1.0
+    ├─ #106866 | Add retry logic                               | Closed     | 1.0/1.5    | +0.5
+```
+
+**CSV format**:
+```bash
+ruby crawler.rb -t 2 -l 50 -f csv > output.csv
+# Import vào Excel/Google Sheets để phân tích
+```
+
+**JSON format**:
+```bash
+ruby crawler.rb -i 106864 -f json > output.json
+# Dùng cho data analysis hoặc integrate với tools khác
+```
 
 ### 1. Script đơn giản (example.rb)
 
@@ -227,14 +309,17 @@ end
 
 ```
 redmine-crawler/
+├── crawler.rb             # ★ SCRIPT CHÍNH - Crawl dữ liệu với Difficulty, PR, Diff estimate
 ├── redmine_client.rb      # Class chính để tương tác với Redmine API
 ├── dotenv.rb              # Auto-loader cho .env file
-├── example.rb             # Script ví dụ đơn giản
-├── get_user_story.rb      # Script nâng cao với nhiều options
+├── example.rb             # Script ví dụ đơn giản (có thể bỏ qua)
+├── get_user_story.rb      # Script query cơ bản (có thể bỏ qua)
 ├── .env.example           # Template cho file cấu hình
 ├── .env                   # File cấu hình (tự tạo, đã có trong .gitignore)
 └── README.md              # File này
 ```
+
+**Lưu ý**: Chỉ cần tập trung vào `crawler.rb` - đây là script chính với đầy đủ tính năng.
 
 ## API Endpoints được hỗ trợ
 
