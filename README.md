@@ -5,7 +5,7 @@ Script Ruby để lấy thông tin từ Redmine API. Hỗ trợ lấy thông tin
 ## Yêu cầu
 
 - Ruby 2.5 trở lên
-- API Key từ Redmine
+- API Key từ Redmine (hoặc Username/Password)
 
 ## Cài đặt
 
@@ -34,6 +34,35 @@ REDMINE_API_KEY=your_api_key_here
 4. Tìm phần "API access key" hoặc "Access keys"
 5. Click "Show" để xem API key hoặc "Reset" để tạo mới
 6. Copy API key và paste vào file `.env`
+
+### Phương thức xác thực
+
+Script hỗ trợ 2 phương thức xác thực:
+
+**1. API Key (Khuyến nghị)**
+```bash
+export REDMINE_API_KEY=your_api_key_here
+ruby example.rb
+```
+
+**2. Username/Password**
+```bash
+export REDMINE_USERNAME=your_username
+export REDMINE_PASSWORD=your_password
+ruby example.rb
+```
+
+### Chế độ Debug
+
+Để xem chi tiết request/response và troubleshoot lỗi:
+
+```bash
+# Sử dụng environment variable
+DEBUG=true REDMINE_API_KEY=your_key ruby example.rb
+
+# Hoặc dùng option --debug (chỉ với get_user_story.rb)
+REDMINE_API_KEY=your_key ruby get_user_story.rb -i 106864 --debug
+```
 
 ## Sử dụng
 
@@ -161,6 +190,57 @@ redmine-crawler/
 - `GET /issues.json` - Lấy danh sách issues với filter
 - `GET /users/:id.json` - Lấy thông tin user
 - `GET /projects.json` - Lấy danh sách projects
+
+## Troubleshooting
+
+### Lỗi 401 Unauthorized
+
+Nếu bạn gặp lỗi này:
+```
+Lỗi: Failed to fetch issue: 401 - Unauthorized
+```
+
+**Nguyên nhân và giải pháp:**
+
+1. **API Key chưa được thiết lập hoặc sai**
+   - Kiểm tra xem bạn đã set `REDMINE_API_KEY` chưa
+   - Chạy với debug mode để xem chi tiết: `DEBUG=true ruby example.rb`
+   - Đảm bảo API key đúng bằng cách login vào Redmine và kiểm tra lại
+
+2. **API Key đã hết hạn hoặc bị vô hiệu hóa**
+   - Vào Redmine > My account > API access key
+   - Click "Reset" để tạo key mới
+
+3. **REST API chưa được bật trên server**
+   - Liên hệ admin Redmine để bật REST API
+   - Vào Administration > Settings > API > Enable REST web service
+
+4. **Thử dùng Username/Password thay vì API Key**
+   ```bash
+   REDMINE_USERNAME=your_username REDMINE_PASSWORD=your_password ruby example.rb
+   ```
+
+### Lỗi SSL Certificate
+
+Nếu gặp lỗi SSL:
+```
+SSL_connect returned=1 errno=0 state=error: certificate verify failed
+```
+
+Script đã tự động tắt SSL verification (dành cho self-signed certificates). Nếu vẫn gặp lỗi, kiểm tra xem server có đang chạy HTTPS không.
+
+### Xem chi tiết lỗi
+
+Luôn sử dụng debug mode khi gặp vấn đề:
+```bash
+DEBUG=true REDMINE_API_KEY=your_key ruby get_user_story.rb -i 106864
+```
+
+Debug mode sẽ hiển thị:
+- URL được request
+- Headers được gửi
+- Response status và headers
+- Response body khi có lỗi
 
 ## Tham khảo
 

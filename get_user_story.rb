@@ -6,6 +6,9 @@ require 'optparse'
 # Cấu hình
 REDMINE_URL = ENV['REDMINE_URL'] || 'https://dev.zigexn.vn'
 REDMINE_API_KEY = ENV['REDMINE_API_KEY']
+REDMINE_USERNAME = ENV['REDMINE_USERNAME']
+REDMINE_PASSWORD = ENV['REDMINE_PASSWORD']
+DEBUG = ENV['DEBUG'] == 'true' || ENV['DEBUG'] == '1'
 
 # Parse command line arguments
 options = {}
@@ -40,24 +43,64 @@ OptionParser.new do |opts|
     options[:json] = true
   end
 
+  opts.on("--debug", "Bật chế độ debug") do
+    options[:debug] = true
+  end
+
   opts.on("-h", "--help", "Hiển thị trợ giúp") do
     puts opts
     exit
   end
 end.parse!
 
-# Kiểm tra API key
-if REDMINE_API_KEY.nil? || REDMINE_API_KEY.empty?
-  puts "ERROR: REDMINE_API_KEY chưa được thiết lập!"
-  puts "Vui lòng:"
-  puts "  1. Copy file .env.example thành .env"
-  puts "  2. Điền API key của bạn vào file .env"
-  puts "  3. Chạy lại script với: REDMINE_API_KEY=your_key ruby get_user_story.rb"
+# Kiểm tra thông tin xác thực
+if REDMINE_API_KEY.nil? && (REDMINE_USERNAME.nil? || REDMINE_PASSWORD.nil?)
+  puts "=" * 80
+  puts "ERROR: Chưa cấu hình thông tin xác thực!"
+  puts "=" * 80
+  puts ""
+  puts "Bạn cần thiết lập một trong hai phương thức xác thực sau:"
+  puts ""
+  puts "PHƯƠNG THỨC 1: Dùng API Key (Khuyến nghị)"
+  puts "  1. Đăng nhập vào Redmine: #{REDMINE_URL}"
+  puts "  2. Click vào tên người dùng ở góc trên phải > 'My account'"
+  puts "  3. Tìm phần 'API access key' hoặc 'Access keys'"
+  puts "  4. Click 'Show' để xem hoặc 'Reset' để tạo key mới"
+  puts "  5. Chạy lại script với API key:"
+  puts ""
+  puts "     REDMINE_API_KEY=your_api_key_here ruby get_user_story.rb -i 106864"
+  puts ""
+  puts "PHƯƠNG THỨC 2: Dùng Username/Password"
+  puts "  Chạy script với username và password:"
+  puts ""
+  puts "     REDMINE_USERNAME=your_username REDMINE_PASSWORD=your_password ruby get_user_story.rb -i 106864"
+  puts ""
+  puts "CHẾ ĐỘ DEBUG:"
+  puts "  Để xem chi tiết request/response, thêm --debug hoặc DEBUG=true:"
+  puts ""
+  puts "     DEBUG=true REDMINE_API_KEY=your_key ruby get_user_story.rb -i 106864"
+  puts "     REDMINE_API_KEY=your_key ruby get_user_story.rb -i 106864 --debug"
+  puts ""
+  puts "=" * 80
   exit 1
 end
 
 # Khởi tạo client
-client = RedmineClient.new(REDMINE_URL, REDMINE_API_KEY)
+debug_mode = DEBUG || options[:debug]
+
+if REDMINE_API_KEY
+  client = RedmineClient.new(REDMINE_URL, REDMINE_API_KEY, {
+    debug: debug_mode,
+    verify_ssl: false  # Tắt SSL verification cho self-signed certificates
+  })
+else
+  client = RedmineClient.new(REDMINE_URL, nil, {
+    username: REDMINE_USERNAME,
+    password: REDMINE_PASSWORD,
+    debug: debug_mode,
+    verify_ssl: false
+  })
+end
 
 def print_issue(issue, json_format = false)
   if json_format
