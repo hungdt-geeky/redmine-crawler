@@ -123,7 +123,8 @@ end
 
 def format_issue_data(issue, client: nil, github_client: nil, include_subtasks: true)
   difficulty = get_custom_field(issue, 'Difficulty Level')
-  pr_link = get_custom_field(issue, 'JP Request') || get_custom_field(issue, 'PR')
+  issue_link = get_custom_field(issue, 'JP Request')  # GitHub Issue link
+  pr_link = get_custom_field(issue, 'PR')              # GitHub PR link
 
   diff_data = calculate_diff_estimate(issue)
 
@@ -135,6 +136,7 @@ def format_issue_data(issue, client: nil, github_client: nil, include_subtasks: 
     priority: issue['priority'] ? issue['priority']['name'] : 'N/A',
     assigned_to: issue['assigned_to'] ? issue['assigned_to']['name'] : 'Unassigned',
     difficulty_level: difficulty || 'N/A',
+    issue_link: issue_link || 'N/A',
     pr_link: pr_link || 'N/A',
     estimated_hours: diff_data[:estimated],
     spent_hours: diff_data[:spent],
@@ -146,7 +148,22 @@ def format_issue_data(issue, client: nil, github_client: nil, include_subtasks: 
     updated_on: issue['updated_on']
   }
 
-  # Fetch GitHub PR/Issue info if PR link exists
+  # Fetch GitHub Issue info if issue link exists
+  if github_client && issue_link && issue_link != 'N/A' && issue_link.include?('github.com')
+    issue_info = github_client.get_pr_info(issue_link)
+    if issue_info
+      data[:issue_comments] = issue_info[:comments]
+      data[:issue_state] = issue_info[:state]
+    else
+      data[:issue_comments] = 'N/A'
+      data[:issue_state] = 'N/A'
+    end
+  else
+    data[:issue_comments] = 'N/A'
+    data[:issue_state] = 'N/A'
+  end
+
+  # Fetch GitHub PR info if PR link exists
   if github_client && pr_link && pr_link != 'N/A' && pr_link.include?('github.com')
     pr_info = github_client.get_pr_info(pr_link)
     if pr_info
@@ -249,8 +266,17 @@ def print_table(issues_data)
       "#{data[:done_ratio]}%"
     ]
 
+    # Print Issue link if exists
+    if data[:issue_link] && data[:issue_link] != 'N/A' && !data[:issue_link].empty?
+      issue_info = "  Issue: #{data[:issue_link]}"
+      if data[:issue_comments] && data[:issue_comments] != 'N/A'
+        issue_info += " | Comments: #{data[:issue_comments]} | State: #{data[:issue_state]}"
+      end
+      puts issue_info
+    end
+
     # Print PR link if exists
-    if data[:pr_link] && data[:pr_link] != 'N/A'
+    if data[:pr_link] && data[:pr_link] != 'N/A' && !data[:pr_link].empty?
       pr_info = "  PR: #{data[:pr_link]}"
       if data[:pr_comments] && data[:pr_comments] != 'N/A'
         pr_info += " | Comments: #{data[:pr_comments]} | State: #{data[:pr_state]}"
@@ -300,7 +326,9 @@ def print_csv(issues_data)
     # Header
     csv << [
       'ID', 'Subject', 'Tracker', 'Status', 'Priority', 'Assigned To',
-      'Difficulty Level', 'PR Link', 'PR Comments', 'PR State',
+      'Difficulty Level',
+      'Issue Link', 'Issue Comments', 'Issue State',
+      'PR Link', 'PR Comments', 'PR State',
       'Estimated Hours', 'Spent Hours', 'Diff (Spent-Est)',
       'Start Date', 'Due Date', 'Done %',
       'Test Cases', 'STG Bugs (VN)', 'STG Bugs (JP)', 'Production Bugs',
@@ -317,7 +345,10 @@ def print_csv(issues_data)
         data[:priority],
         data[:assigned_to],
         data[:difficulty_level],
-        data[:pr_link],
+        data[:issue_link] || '',
+        data[:issue_comments] || '',
+        data[:issue_state] || '',
+        data[:pr_link] || '',
         data[:pr_comments] || '',
         data[:pr_state] || '',
         data[:estimated_hours],
@@ -349,7 +380,10 @@ def print_csv(issues_data)
             subtask[:priority],
             subtask[:assigned_to],
             subtask[:difficulty_level],
-            subtask[:pr_link],
+            subtask[:issue_link] || '',
+            subtask[:issue_comments] || '',
+            subtask[:issue_state] || '',
+            subtask[:pr_link] || '',
             subtask[:pr_comments] || '',
             subtask[:pr_state] || '',
             subtask[:estimated_hours],
