@@ -29,3 +29,6 @@ Thumbs.db
 *.json
 *.csv
 *.log
+
+# Input files with issue lists
+list_issues.txt

@@ -28,6 +28,10 @@ OptionParser.new do |opts|
     options[:issue_id] = id
   end
 
+  opts.on("--file FILE", "File chứa danh sách issue IDs (mỗi dòng 1 ID)") do |file|
+    options[:issues_file] = file
+  end
+
   opts.on("-p", "--project PROJECT", "Crawl tất cả issues trong project") do |project|
     options[:project] = project
   end
@@ -66,6 +70,9 @@ OptionParser.new do |opts|
     puts "Examples:"
     puts "  # Crawl một issue cụ thể"
     puts "  ruby crawler.rb -i 106864"
+    puts ""
+    puts "  # Crawl list issues từ file"
+    puts "  ruby crawler.rb --file list_issues.txt"
     puts ""
     puts "  # Crawl tất cả User Stories trong project"
     puts "  ruby crawler.rb -p my_project -t 2"
@@ -476,6 +483,54 @@ if options[:issue_id]
     print_json([formatted])
   else
     print_table([formatted])
+  end
+elsif options[:issues_file]
+  # Crawl list issues từ file
+  unless File.exist?(options[:issues_file])
+    puts "ERROR: File không tồn tại: #{options[:issues_file]}"
+    exit 1
+  end
+
+  # Đọc file và parse issue IDs
+  issue_ids = File.readlines(options[:issues_file]).map do |line|
+    line.strip.to_i
+  end.reject { |id| id == 0 }  # Loại bỏ dòng trống hoặc invalid
+
+  if issue_ids.empty?
+    puts "ERROR: File không chứa issue ID hợp lệ"
+    exit 1
+  end
+
+  puts "Fetching #{issue_ids.length} issues from file..." if options[:format] == 'table'
+
+  # Fetch từng issue
+  formatted_issues = []
+  issue_ids.each_with_index do |issue_id, index|
+    puts "  [#{index + 1}/#{issue_ids.length}] Fetching issue ##{issue_id}..." if options[:format] == 'table'
+
+    issue_data = client.get_issue(issue_id, include: 'children,attachments')
+
+    if issue_data['error']
+      puts "  Warning: Failed to fetch issue ##{issue_id}: #{issue_data['error']}" if options[:format] == 'table'
+      next
+    end
+
+    formatted = format_issue_data(issue_data['issue'], client: client, github_client: github_client, include_subtasks: options[:include_subtasks])
+    formatted_issues << formatted
+  end
+
+  if formatted_issues.empty?
+    puts "ERROR: Không fetch được issue nào"
+    exit 1
+  end
+
+  case options[:format]
+  when 'csv'
+    print_csv(formatted_issues)
+  when 'json'
+    print_json(formatted_issues)
+  else
+    print_table(formatted_issues)
   end
 else
   # Crawl danh sách issues
