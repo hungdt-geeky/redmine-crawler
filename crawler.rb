@@ -275,13 +275,15 @@ def print_table(issues_data)
       puts issue_info
     end
 
-    # Print PR link if exists
+    # Print PR link (always show, use "None" if empty)
     if data[:pr_link] && data[:pr_link] != 'N/A' && !data[:pr_link].empty?
       pr_info = "  PR: #{data[:pr_link]}"
       if data[:pr_comments] && data[:pr_comments] != 'N/A'
         pr_info += " | Comments: #{data[:pr_comments]} | State: #{data[:pr_state]}"
       end
       puts pr_info
+    else
+      puts "  PR: None"
     end
 
     # Print subtasks recursively
