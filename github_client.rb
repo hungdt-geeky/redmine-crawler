@@ -38,10 +38,13 @@ class GitHubClient
     parsed = parse_github_url(url)
     return nil unless parsed
 
-    # GitHub API endpoint
-    # Note: Both PRs and Issues can use the /issues endpoint
-    # PRs are also issues in GitHub's API
-    api_url = "https://api.github.com/repos/#{parsed[:owner]}/#{parsed[:repo]}/issues/#{parsed[:number]}"
+    # For Pull Requests, use /pulls endpoint to get both issue comments and review comments
+    # For Issues, use /issues endpoint
+    if parsed[:type] == 'pull'
+      api_url = "https://api.github.com/repos/#{parsed[:owner]}/#{parsed[:repo]}/pulls/#{parsed[:number]}"
+    else
+      api_url = "https://api.github.com/repos/#{parsed[:owner]}/#{parsed[:repo]}/issues/#{parsed[:number]}"
+    end
 
     debug_log "Fetching GitHub #{parsed[:type]} info: #{api_url}"
 
@@ -60,11 +63,19 @@ class GitHubClient
 
     if response.code == '200'
       data = JSON.parse(response.body)
+
+      # For PRs, combine issue comments + review comments
+      total_comments = data['comments'].to_i
+      if parsed[:type] == 'pull' && data['review_comments']
+        total_comments += data['review_comments'].to_i
+        debug_log "  Issue comments: #{data['comments']}, Review comments: #{data['review_comments']}, Total: #{total_comments}"
+      end
+
       {
         number: data['number'],
         title: data['title'],
         state: data['state'],
-        comments: data['comments'],
+        comments: total_comments,
         created_at: data['created_at'],
         updated_at: data['updated_at'],
         closed_at: data['closed_at'],
