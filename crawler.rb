@@ -197,10 +197,15 @@ def format_issue_data(issue, client: nil, github_client: nil, include_subtasks: 
 
   # Lấy thêm thông tin cho Testing subtasks (bắt đầu với "4.")
   if issue['subject'] && issue['subject'].strip.start_with?('4.')
-    data[:test_cases] = get_custom_field(issue, 'Number of test cases') || '0'
-    data[:stg_bugs_vn] = get_custom_field(issue, 'STG Bugs (VN)') || '0'
-    data[:stg_bugs_jp] = get_custom_field(issue, 'STG Bugs (JP)') || '0'
-    data[:production_bugs] = get_custom_field(issue, 'Production Bugs') || '0'
+    test_cases = get_custom_field(issue, 'Number of test cases')
+    stg_vn = get_custom_field(issue, 'STG Bugs (VN)')
+    stg_jp = get_custom_field(issue, 'STG Bugs (JP)')
+    prod_bugs = get_custom_field(issue, 'Production Bugs')
+
+    data[:test_cases] = (test_cases.nil? || test_cases.to_s.strip.empty?) ? '0' : test_cases
+    data[:stg_bugs_vn] = (stg_vn.nil? || stg_vn.to_s.strip.empty?) ? '0' : stg_vn
+    data[:stg_bugs_jp] = (stg_jp.nil? || stg_jp.to_s.strip.empty?) ? '0' : stg_jp
+    data[:production_bugs] = (prod_bugs.nil? || prod_bugs.to_s.strip.empty?) ? '0' : prod_bugs
   end
 
   # Lấy subtasks nếu có (recursively)
