@@ -124,7 +124,7 @@ end
 def format_issue_data(issue, client: nil, github_client: nil, include_subtasks: true)
   difficulty = get_custom_field(issue, 'Difficulty Level')
   issue_link = get_custom_field(issue, 'JP Request')  # GitHub Issue link
-  pr_link = get_custom_field(issue, 'PR')              # GitHub PR link
+  pr_field = get_custom_field(issue, 'PR')             # GitHub PR link(s) - can be multiple
 
   diff_data = calculate_diff_estimate(issue)
 
@@ -137,7 +137,6 @@ def format_issue_data(issue, client: nil, github_client: nil, include_subtasks: 
     assigned_to: issue['assigned_to'] ? issue['assigned_to']['name'] : 'Unassigned',
     difficulty_level: difficulty || 'N/A',
     issue_link: issue_link || 'N/A',
-    pr_link: pr_link || 'N/A',
     estimated_hours: diff_data[:estimated],
     spent_hours: diff_data[:spent],
     diff_estimate: diff_data[:diff],
@@ -163,19 +162,37 @@ def format_issue_data(issue, client: nil, github_client: nil, include_subtasks: 
     data[:issue_state] = 'N/A'
   end
 
-  # Fetch GitHub PR info if PR link exists
-  if github_client && pr_link && pr_link != 'N/A' && pr_link.include?('github.com')
-    pr_info = github_client.get_pr_info(pr_link)
-    if pr_info
-      data[:pr_comments] = pr_info[:comments]
-      data[:pr_state] = pr_info[:state]
-    else
-      data[:pr_comments] = 'N/A'
-      data[:pr_state] = 'N/A'
+  # Parse and fetch multiple PR links
+  data[:pr_list] = []
+  if pr_field && pr_field != 'N/A' && !pr_field.empty?
+    # Split by newline to get multiple PR links
+    pr_links = pr_field.split(/[\r\n]+/).map(&:strip).reject(&:empty?)
+
+    pr_links.each do |pr_link|
+      if pr_link.include?('github.com') && github_client
+        pr_info = github_client.get_pr_info(pr_link)
+        if pr_info
+          data[:pr_list] << {
+            url: pr_link,
+            comments: pr_info[:comments],
+            state: pr_info[:state]
+          }
+        else
+          data[:pr_list] << {
+            url: pr_link,
+            comments: 'N/A',
+            state: 'N/A'
+          }
+        end
+      else
+        # No GitHub client or not a GitHub link
+        data[:pr_list] << {
+          url: pr_link,
+          comments: 'N/A',
+          state: 'N/A'
+        }
+      end
     end
-  else
-    data[:pr_comments] = 'N/A'
-    data[:pr_state] = 'N/A'
   end
 
   # Lấy thêm thông tin cho Testing subtasks (bắt đầu với "4.")
@@ -275,13 +292,15 @@ def print_table(issues_data)
       puts issue_info
     end
 
-    # Print PR link (always show, use "None" if empty)
-    if data[:pr_link] && data[:pr_link] != 'N/A' && !data[:pr_link].empty?
-      pr_info = "  PR: #{data[:pr_link]}"
-      if data[:pr_comments] && data[:pr_comments] != 'N/A'
-        pr_info += " | Comments: #{data[:pr_comments]} | State: #{data[:pr_state]}"
+    # Print PR links (can be multiple)
+    if data[:pr_list] && !data[:pr_list].empty?
+      data[:pr_list].each do |pr|
+        pr_info = "  PR: #{pr[:url]}"
+        if pr[:comments] && pr[:comments] != 'N/A'
+          pr_info += " | Comments: #{pr[:comments]} | State: #{pr[:state]}"
+        end
+        puts pr_info
       end
-      puts pr_info
     else
       puts "  PR: None"
     end
@@ -330,7 +349,7 @@ def print_csv(issues_data)
       'ID', 'Subject', 'Tracker', 'Status', 'Priority', 'Assigned To',
       'Difficulty Level',
       'Issue Link', 'Issue Comments', 'Issue State',
-      'PR Link', 'PR Comments', 'PR State',
+      'PR Links',
       'Estimated Hours', 'Spent Hours', 'Diff (Spent-Est)',
       'Start Date', 'Due Date', 'Done %',
       'Test Cases', 'STG Bugs (VN)', 'STG Bugs (JP)', 'Production Bugs',
@@ -339,6 +358,14 @@ def print_csv(issues_data)
 
     # Data rows
     issues_data.each do |data|
+      # Format PR list as single string
+      pr_string = ''
+      if data[:pr_list] && !data[:pr_list].empty?
+        pr_string = data[:pr_list].map do |pr|
+          "#{pr[:url]} (Comments: #{pr[:comments]}, State: #{pr[:state]})"
+        end.join('; ')
+      end
+
       csv << [
         data[:id],
         data[:subject],
@@ -350,9 +377,7 @@ def print_csv(issues_data)
         data[:issue_link] || '',
         data[:issue_comments] || '',
         data[:issue_state] || '',
-        data[:pr_link] || '',
-        data[:pr_comments] || '',
-        data[:pr_state] || '',
+        pr_string,
         data[:estimated_hours],
         data[:spent_hours],
         data[:diff_estimate],
@@ -374,6 +399,15 @@ def print_csv(issues_data)
         flattened = flatten_subtasks_for_csv(data[:subtasks], data[:id])
         flattened.each do |item|
           subtask = item[:data]
+
+          # Format PR list for subtask
+          subtask_pr_string = ''
+          if subtask[:pr_list] && !subtask[:pr_list].empty?
+            subtask_pr_string = subtask[:pr_list].map do |pr|
+              "#{pr[:url]} (Comments: #{pr[:comments]}, State: #{pr[:state]})"
+            end.join('; ')
+          end
+
           csv << [
             subtask[:id],
             subtask[:subject],
@@ -385,9 +419,7 @@ def print_csv(issues_data)
             subtask[:issue_link] || '',
             subtask[:issue_comments] || '',
             subtask[:issue_state] || '',
-            subtask[:pr_link] || '',
-            subtask[:pr_comments] || '',
-            subtask[:pr_state] || '',
+            subtask_pr_string,
             subtask[:estimated_hours],
             subtask[:spent_hours],
             subtask[:diff_estimate],
