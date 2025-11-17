@@ -112,7 +112,7 @@ end
 def calculate_diff_estimate(issue)
   estimated = issue['estimated_hours'].to_f
   spent = issue['spent_hours'].to_f
-  diff = spent - estimated
+  diff = estimated - spent  # Positive = finished faster (OK), Negative = took longer (needs review)
 
   {
     estimated: estimated,
@@ -235,16 +235,18 @@ def print_subtasks(subtasks, indent_level = 1)
   subtasks.each do |subtask|
     sub_est_spent = "#{subtask[:estimated_hours]}/#{subtask[:spent_hours]}"
     sub_diff = subtask[:diff_estimate] >= 0 ? "+#{subtask[:diff_estimate]}" : subtask[:diff_estimate].to_s
+    sub_assigned = subtask[:assigned_to] || 'Unassigned'
 
     # Adjust subject width based on indentation level
     indent = "  " + ("  " * indent_level)
-    subject_width = 40 - (indent_level * 2)
-    subject_width = 20 if subject_width < 20 # Minimum width
+    subject_width = 35 - (indent_level * 2)
+    subject_width = 18 if subject_width < 18 # Minimum width
 
-    puts "#{indent}├─ #%-6s | %-#{subject_width}s | %-10s | %-8s | %s" % [
+    puts "#{indent}├─ #%-6s | %-#{subject_width}s | %-10s | %-10s | %-8s | %s" % [
       subtask[:id],
       subtask[:subject][0..(subject_width - 1)],
       subtask[:status][0..9],
+      sub_assigned[0..9],
       sub_est_spent,
       sub_diff
     ]
